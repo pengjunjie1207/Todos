@@ -6,8 +6,10 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
+using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.UI.Core;
@@ -64,18 +66,9 @@ namespace Todos
         {
             Frame rootFrame = Window.Current.Content as Frame;
 
-            if (rootFrame.CanGoBack)
-            {
-                // Show UI in title bar if opted-in and in-app backstack is not empty.
-                SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
-                    AppViewBackButtonVisibility.Visible;
-            }
-            else
-            {
-                // Remove the UI from the title bar if in-app back stack is empty.
-                SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
-                    AppViewBackButtonVisibility.Collapsed;
-            }
+            SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
+                AppViewBackButtonVisibility.Collapsed;
+
             if (e.Parameter.GetType() == typeof(ViewModels.TodoItemViewModel))
             {
                 this.ViewModel = (ViewModels.TodoItemViewModel)(e.Parameter);
@@ -96,7 +89,7 @@ namespace Todos
             {
                 ViewModel.SelectedItem.completed = false;
             }
-            if (All.ActualWidth < 600.0)
+            if (All.ActualWidth < 800.0)
             {
                 Frame.Navigate(typeof(NewPage), ViewModel);
             }
@@ -135,15 +128,29 @@ namespace Todos
 
             if (CUButton.Content.ToString() == "Create")
             {
-                BitmapImage defaultimage = new BitmapImage();
+                WriteableBitmap defaultimage = null;
                 StorageFile file = await StorageFile.GetFileFromApplicationUriAsync(new Uri("ms-appx:///Assets/background.jpg"));
                 if (file != null)
                 {
                     using (IRandomAccessStream fileStream = await file.OpenAsync(Windows.Storage.FileAccessMode.Read))
                     {
-                        // Set the image source to the selected bitmap 
-                        defaultimage.DecodePixelWidth = 600; //match the target Image.Width, not shown
-                        await defaultimage.SetSourceAsync(fileStream);
+                        BitmapDecoder bitmapDecoder = await BitmapDecoder.CreateAsync(fileStream);
+
+                        BitmapTransform dummyTransform = new BitmapTransform();
+                        PixelDataProvider pixelDataProvider =
+                           await bitmapDecoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,
+                           BitmapAlphaMode.Premultiplied, dummyTransform,
+                           ExifOrientationMode.RespectExifOrientation,
+                           ColorManagementMode.ColorManageToSRgb);
+                        byte[] pixelData = pixelDataProvider.DetachPixelData();
+
+                        defaultimage = new WriteableBitmap(
+                           (int)bitmapDecoder.OrientedPixelWidth,
+                           (int)bitmapDecoder.OrientedPixelHeight);
+                        using (Stream pixelStream = defaultimage.PixelBuffer.AsStream())
+                        {
+                            await pixelStream.WriteAsync(pixelData, 0, pixelData.Length);
+                        }
                     }
                 }
                 ViewModel.AddTodoItem(title.Text, detail.Text, defaultimage, date.Date.DateTime);
@@ -160,15 +167,29 @@ namespace Todos
         {
             title.Text = "";
             detail.Text = "";
-            BitmapImage defaultimage = new BitmapImage();
+            WriteableBitmap defaultimage = null;
             StorageFile file = await StorageFile.GetFileFromApplicationUriAsync(new Uri("ms-appx:///Assets/background.jpg"));
             if (file != null)
             {
                 using (IRandomAccessStream fileStream = await file.OpenAsync(Windows.Storage.FileAccessMode.Read))
                 {
-                    // Set the image source to the selected bitmap 
-                    defaultimage.DecodePixelWidth = 600; //match the target Image.Width, not shown
-                    await defaultimage.SetSourceAsync(fileStream);
+                    BitmapDecoder bitmapDecoder = await BitmapDecoder.CreateAsync(fileStream);
+
+                    BitmapTransform dummyTransform = new BitmapTransform();
+                    PixelDataProvider pixelDataProvider =
+                       await bitmapDecoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,
+                       BitmapAlphaMode.Premultiplied, dummyTransform,
+                       ExifOrientationMode.RespectExifOrientation,
+                       ColorManagementMode.ColorManageToSRgb);
+                    byte[] pixelData = pixelDataProvider.DetachPixelData();
+
+                    defaultimage = new WriteableBitmap(
+                       (int)bitmapDecoder.OrientedPixelWidth,
+                       (int)bitmapDecoder.OrientedPixelHeight);
+                    using (Stream pixelStream = defaultimage.PixelBuffer.AsStream())
+                    {
+                        await pixelStream.WriteAsync(pixelData, 0, pixelData.Length);
+                    }
                 }
             }
             image.Source = defaultimage;
@@ -227,6 +248,27 @@ namespace Todos
                 {
                     myCon.Visibility = Visibility.Visible;
                 }
+            }
+        }
+        private Models.TodoItem shareItem;
+        private void MenuFlyoutItemShare_Click(object sender, RoutedEventArgs e)
+        {
+            shareItem = ((MenuFlyoutItem)sender).DataContext as Models.TodoItem;
+            DataTransferManager dataTransferManager = DataTransferManager.GetForCurrentView();
+            dataTransferManager.DataRequested += new TypedEventHandler<DataTransferManager, DataRequestedEventArgs>(this.DataRequested);
+            DataTransferManager.ShowShareUI();
+        }
+        private void DataRequested(DataTransferManager sender, DataRequestedEventArgs e)
+        {
+            DataRequest request = e.Request;
+            request.Data.Properties.Title = shareItem.title;
+            request.Data.Properties.Description = shareItem.detail;
+            
+            if (shareItem.imageFile != null)
+            {
+                RandomAccessStreamReference imageStreamRef = RandomAccessStreamReference.CreateFromFile(shareItem.imageFile);
+                request.Data.Properties.Thumbnail = imageStreamRef;
+                request.Data.SetBitmap(imageStreamRef);
             }
         }
     }

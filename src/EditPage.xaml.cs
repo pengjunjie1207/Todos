@@ -20,6 +20,7 @@ using Windows.UI.Popups;
 using Windows.Storage.Pickers;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.Storage.Streams;
+using Windows.Graphics.Imaging;
 
 namespace Todos
 {
@@ -34,24 +35,16 @@ namespace Todos
         }
 
         private ViewModels.TodoItemViewModel ViewModel;
-        private BitmapImage bitmapImage;
+        private WriteableBitmap writeableBitmap;
+        private StorageFile imageFile;
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             Frame rootFrame = Window.Current.Content as Frame;
 
-            if (rootFrame.CanGoBack)
-            {
-                // Show UI in title bar if opted-in and in-app backstack is not empty.
-                SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
-                    AppViewBackButtonVisibility.Visible;
-            }
-            else
-            {
-                // Remove the UI from the title bar if in-app back stack is empty.
-                SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
-                    AppViewBackButtonVisibility.Collapsed;
-            }
+            SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
+                AppViewBackButtonVisibility.Visible;
+
             ViewModel = ((ViewModels.TodoItemViewModel)e.Parameter);
             if (ViewModel.SelectedItem == null)
             {
@@ -60,7 +53,7 @@ namespace Todos
             }
             else
             {
-                title.Text = ViewModel.SelectedItem.title + ViewModel.SelectedItem.completed;
+                title.Text = ViewModel.SelectedItem.title;
                 detail.Text = ViewModel.SelectedItem.detail;
                 image.Source = ViewModel.SelectedItem.image;
                 date.Date = ViewModel.SelectedItem.date;
@@ -85,37 +78,55 @@ namespace Todos
                 var i = new MessageDialog("Invalid Date!").ShowAsync();
                 return;
             }
-            BitmapImage defaultimage = new BitmapImage();
+            WriteableBitmap defaultimage = null;
             StorageFile file = await StorageFile.GetFileFromApplicationUriAsync(new Uri("ms-appx:///Assets/background.jpg"));
             if (file != null)
             {
                 using (IRandomAccessStream fileStream = await file.OpenAsync(Windows.Storage.FileAccessMode.Read))
                 {
-                    // Set the image source to the selected bitmap 
-                    defaultimage.DecodePixelWidth = 600; //match the target Image.Width, not shown
-                    await defaultimage.SetSourceAsync(fileStream);
+                    BitmapDecoder bitmapDecoder = await BitmapDecoder.CreateAsync(fileStream);
+
+                    BitmapTransform dummyTransform = new BitmapTransform();
+                    PixelDataProvider pixelDataProvider =
+                       await bitmapDecoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,
+                       BitmapAlphaMode.Premultiplied, dummyTransform,
+                       ExifOrientationMode.RespectExifOrientation,
+                       ColorManagementMode.ColorManageToSRgb);
+                    byte[] pixelData = pixelDataProvider.DetachPixelData();
+
+                    defaultimage = new WriteableBitmap(
+                       (int)bitmapDecoder.OrientedPixelWidth,
+                       (int)bitmapDecoder.OrientedPixelHeight);
+                    using (Stream pixelStream = defaultimage.PixelBuffer.AsStream())
+                    {
+                        await pixelStream.WriteAsync(pixelData, 0, pixelData.Length);
+                    }
                 }
             }
             if (CUButton.Content.ToString() == "Create")
             {
-                if (bitmapImage == null)
+                if (writeableBitmap == null)
                 {
                     ViewModel.AddTodoItem(title.Text, detail.Text, defaultimage, date.Date.DateTime);
+                    ViewModel.AllItems.Last().imageFile = file;
                 }
                 else
                 {
-                    ViewModel.AddTodoItem(title.Text, detail.Text, bitmapImage, date.Date.DateTime);
+                    ViewModel.AddTodoItem(title.Text, detail.Text, writeableBitmap, date.Date.DateTime);
+                    ViewModel.AllItems.Last().imageFile = imageFile;
                 }
             }
             else
             {
-                if (bitmapImage == null)
+                if (writeableBitmap == null)
                 {
+                    ViewModel.SelectedItem.imageFile = file;
                     ViewModel.UpdateTodoItem(ViewModel.SelectedItem.id, title.Text, detail.Text, defaultimage, date.Date.DateTime);
                 }
                 else
                 {
-                    ViewModel.UpdateTodoItem(ViewModel.SelectedItem.id, title.Text, detail.Text, bitmapImage, date.Date.DateTime);
+                    ViewModel.SelectedItem.imageFile = imageFile;
+                    ViewModel.UpdateTodoItem(ViewModel.SelectedItem.id, title.Text, detail.Text, writeableBitmap, date.Date.DateTime);
                 }
             }
             Frame.Navigate(typeof(MainPage), ViewModel);
@@ -129,19 +140,34 @@ namespace Todos
         {
             title.Text = "";
             detail.Text = "";
-            BitmapImage defaultimage = new BitmapImage();
+            WriteableBitmap defaultimage = null;
             StorageFile file = await StorageFile.GetFileFromApplicationUriAsync(new Uri("ms-appx:///Assets/background.jpg"));
             if (file != null)
             {
+                imageFile = file;
                 using (IRandomAccessStream fileStream = await file.OpenAsync(Windows.Storage.FileAccessMode.Read))
                 {
-                    // Set the image source to the selected bitmap 
-                    defaultimage.DecodePixelWidth = 600; //match the target Image.Width, not shown
-                    await defaultimage.SetSourceAsync(fileStream);
+                    BitmapDecoder bitmapDecoder = await BitmapDecoder.CreateAsync(fileStream);
+
+                    BitmapTransform dummyTransform = new BitmapTransform();
+                    PixelDataProvider pixelDataProvider =
+                       await bitmapDecoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,
+                       BitmapAlphaMode.Premultiplied, dummyTransform,
+                       ExifOrientationMode.RespectExifOrientation,
+                       ColorManagementMode.ColorManageToSRgb);
+                    byte[] pixelData = pixelDataProvider.DetachPixelData();
+
+                    defaultimage = new WriteableBitmap(
+                       (int)bitmapDecoder.OrientedPixelWidth,
+                       (int)bitmapDecoder.OrientedPixelHeight);
+                    using (Stream pixelStream = defaultimage.PixelBuffer.AsStream())
+                    {
+                        await pixelStream.WriteAsync(pixelData, 0, pixelData.Length);
+                    }
                 }
             }
             image.Source = defaultimage;
-            bitmapImage = defaultimage;
+            writeableBitmap = defaultimage;
             date.Date = DateTime.Today;
         }
         private void cancelButton_Click(object sender, RoutedEventArgs e)
@@ -159,16 +185,29 @@ namespace Todos
             StorageFile file = await open.PickSingleFileAsync();
             if (file != null)
             {
+                imageFile = file;
                 using (IRandomAccessStream fileStream = await file.OpenAsync(Windows.Storage.FileAccessMode.Read))
                 {
-                    // Set the image source to the selected bitmap 
-                    bitmapImage = new BitmapImage();
-                    bitmapImage.DecodePixelWidth = 600; //match the target Image.Width, not shown
-                    await bitmapImage.SetSourceAsync(fileStream);
-                    image.Source = bitmapImage;
+                    BitmapDecoder bitmapDecoder = await BitmapDecoder.CreateAsync(fileStream);
+
+                    BitmapTransform dummyTransform = new BitmapTransform();
+                    PixelDataProvider pixelDataProvider =
+                       await bitmapDecoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,
+                       BitmapAlphaMode.Premultiplied, dummyTransform,
+                       ExifOrientationMode.RespectExifOrientation,
+                       ColorManagementMode.ColorManageToSRgb);
+                    byte[] pixelData = pixelDataProvider.DetachPixelData();
+
+                    writeableBitmap = new WriteableBitmap(
+                       (int)bitmapDecoder.OrientedPixelWidth,
+                       (int)bitmapDecoder.OrientedPixelHeight);
+                    using (Stream pixelStream = writeableBitmap.PixelBuffer.AsStream())
+                    {
+                        await pixelStream.WriteAsync(pixelData, 0, pixelData.Length);
+                    }
                 }
             }
+            image.Source = writeableBitmap;
         }
-
     }
 }

@@ -68,6 +68,7 @@
                                     <MenuFlyout>
                                         <MenuFlyoutItem Text="Edit"/>
                                         <MenuFlyoutItem Text="Delete"/>
+                                        <MenuFlyoutItem Text="Share" Click="MenuFlyoutItemShare_Click"/>
                                     </MenuFlyout>
                                 </AppBarButton.Flyout>
                             </AppBarButton>

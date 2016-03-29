@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Windows.Storage;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
 
@@ -17,13 +18,14 @@ namespace Todos.Models
 
         public string detail { get; set; }
 
-        public BitmapImage image { get; set; }
-
-        public bool? completed { get; set; }
+        public WriteableBitmap image { get; set; }
+        public StorageFile imageFile { get; set; }
 
         public DateTime date { get; set; }
+        public bool? completed { get; set; }
 
-        public TodoItem(string title, string detail, BitmapImage image, DateTime date)
+
+        public TodoItem(string title, string detail, WriteableBitmap image, DateTime date)
         {
             this.id = Guid.NewGuid().ToString(); //生成id
             this.title = title;
