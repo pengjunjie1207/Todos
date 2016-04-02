@@ -1,9 +1,13 @@
-﻿using System;
+﻿using SQLitePCL;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
+using Todos.Models;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.ApplicationModel.DataTransfer;
@@ -270,6 +274,33 @@ namespace Todos
                 request.Data.Properties.Thumbnail = imageStreamRef;
                 request.Data.SetBitmap(imageStreamRef);
             }
+        }
+
+        private void Search_Click(object sender, RoutedEventArgs e)
+        {
+            ObservableCollection<TodoItem> resultItems = new ObservableCollection<TodoItem>();
+            string keyWords = searchBox.Text;
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("{0,12}{1,20}{2,30}", "Title", "Detail", "Date");
+            sb.AppendLine();
+            string sql = @"SELECT title, detail, date
+                           FROM TodoItem
+                           WHERE title LIKE ('%' || ? || '%') OR detail LIKE ('%' || ? || '%') OR date LIKE ('%' || ? || '%')
+                           ORDER BY date";
+            using (var statement = Services.SQLiteService.SQLiteService.conn.Prepare(sql))
+            {
+                statement.Bind(1, keyWords);
+                statement.Bind(2, keyWords);
+                statement.Bind(3, keyWords);
+                while (statement.Step() == SQLiteResult.ROW)
+                {
+                    sb.AppendFormat("{0,12}{1,20}{2,30:d}", (string)statement[0], (string)statement[1], DateTime.Parse((string)statement[2]).Date);
+                    sb.AppendLine();
+                }
+            }
+            string str = sb.ToString();
+
+            var i = new MessageDialog(str).ShowAsync();
         }
     }
 }

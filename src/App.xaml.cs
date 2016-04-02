@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
+using Services.SQLiteService;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.Foundation;
@@ -49,6 +51,8 @@ namespace Todos
                 this.DebugSettings.EnableFrameRateCounter = true;
             }
 #endif
+
+            SQLiteService.LoadDatabase();
 
             Frame rootFrame = Window.Current.Content as Frame;
 

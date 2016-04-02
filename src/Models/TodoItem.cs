@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Windows.Graphics.Imaging;
 using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
 
@@ -31,6 +34,16 @@ namespace Todos.Models
             this.title = title;
             this.detail = detail;
             this.image = image;
+            this.date = date;
+            this.completed = false; //默认为未完成
+        }
+
+        public TodoItem(string id, string title, string detail, DateTime date)
+        {
+            this.id = id;
+            this.title = title;
+            this.detail = detail;
+            this.image = null;
             this.date = date;
             this.completed = false; //默认为未完成
         }
